@@ -60,7 +60,14 @@ const observer: IStoreObserverDefinition<IStoreState> = {
 
         const {
             callbacks,
-            callbacks: {prioritized, blocked, executing, watched, stored},
+            callbacks: {
+                prioritized,
+                blocked,
+                executing,
+                watched,
+                executed,
+                stored
+            },
             paths,
             graphs
         } = getState();
@@ -150,6 +157,14 @@ const observer: IStoreObserverDefinition<IStoreState> = {
         */
         requested = rMergedDuplicates;
 
+        // Keep the running result for latest-only callbacks. Their one merged
+        // pending invocation stays requested until that result has been applied.
+        const activeLatest = new Set(
+            [...executing, ...watched, ...executed]
+                .filter(cb => cb.callback.execution === 'latest')
+                .map(getUniqueIdentifier)
+        );
+
         /*
             2. Remove duplicated `prioritized`, `executing` and `watching` callbacks
         */
@@ -184,7 +199,10 @@ const observer: IStoreObserverDefinition<IStoreState> = {
 
         const eDuplicates = flatten(
             map(
-                group => group.slice(0, -1),
+                group =>
+                    group
+                        .slice(0, -1)
+                        .filter(cb => cb.callback.execution !== 'latest'),
                 values(
                     groupBy<ICallback>(
                         getUniqueIdentifier,
@@ -196,7 +214,10 @@ const observer: IStoreObserverDefinition<IStoreState> = {
 
         const wDuplicates = flatten(
             map(
-                group => group.slice(0, -1),
+                group =>
+                    group
+                        .slice(0, -1)
+                        .filter(cb => cb.callback.execution !== 'latest'),
                 values(
                     groupBy<ICallback>(
                         getUniqueIdentifier,
@@ -318,6 +339,12 @@ const observer: IStoreObserverDefinition<IStoreState> = {
             it will be updated for real
         */
         requested = concat(difference(requested, oldBlocked), newBlocked);
+
+        // Apply this after circular-dependency resolution too: that fallback
+        // must never promote a second invocation of an already-running callback.
+        readyCallbacks = readyCallbacks.filter(
+            cb => !activeLatest.has(getUniqueIdentifier(cb))
+        );
 
         /*
             5. Prune callbacks that became irrelevant in their `executionGroup`

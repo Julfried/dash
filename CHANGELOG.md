@@ -5,6 +5,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Add `execution="latest"` for ordinary HTTP server callbacks: finish and publish the running invocation, then run the latest pending inputs without debounce. Preserve newer edits to properties that are both callback inputs and outputs.
 - [#4026](https://github.com/plotly/dash/pull/4026) Add `DASH_SECRET_KEY` so a hosting platform can give every worker and pod the same signing secret for page, background and stream tokens without editing the app (`server.secret_key` still wins and is not changed).
 - [#4026](https://github.com/plotly/dash/pull/4026) Add `DASH_SHARED_STORAGE` to pick the shared-storage backend when the app does not pass `shared_storage=`: `local`, `none`, `diskcache:///abs/path`, or a `redis://` / `rediss://` URL.
 - [#4024](https://github.com/plotly/dash/pull/4024) Add support for social media meta tags in regular Dash apps using `app.title`, `app.description`, and `app.image`.

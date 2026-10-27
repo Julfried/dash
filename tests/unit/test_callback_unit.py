@@ -1,10 +1,62 @@
 """Unit tests for callback decorator behavior - no browser required."""
+
 import inspect
 import json
+
+import pytest
 
 import dash
 from dash import Input, Output, State, callback
 from dash._utils import create_callback_id
+
+
+@pytest.fixture(autouse=True)
+def isolate_global_callbacks(monkeypatch):
+    """Do not leak decorator registrations into subsequent application tests."""
+    monkeypatch.setattr(dash._callback, "GLOBAL_CALLBACK_MAP", {})
+    monkeypatch.setattr(dash._callback, "GLOBAL_CALLBACK_LIST", [])
+
+
+def test_latest_execution_metadata():
+    app = dash.Dash(__name__)
+    app.callback(
+        Output("output", "children"), Input("input", "value"), execution="latest"
+    )(lambda value: value)
+    assert app._callback_list[-1]["execution"] == "latest"
+
+
+def test_default_execution_metadata_is_unchanged():
+    app = dash.Dash(__name__)
+    app.callback(Output("output", "children"), Input("input", "value"))(
+        lambda value: value
+    )
+    assert "execution" not in app._callback_list[-1]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"execution": "invalid"},
+        {"execution": "latest", "background": True},
+        {"execution": "latest", "websocket": True},
+        {"execution": "latest", "persistent": True},
+    ],
+)
+def test_latest_execution_rejects_unsupported_options(options):
+    with pytest.raises(ValueError, match="execution"):
+        callback(Output("output", "children"), Input("input", "value"), **options)
+
+
+def test_latest_execution_rejects_streams():
+    app = dash.Dash(__name__)
+
+    with pytest.raises(ValueError, match="streaming"):
+
+        @app.callback(
+            Output("output", "children"), Input("input", "value"), execution="latest"
+        )
+        async def stream(value):
+            yield value
 
 
 def test_callback_returns_callable():

@@ -99,6 +99,7 @@ def callback(
     mcp_expose_docstring: Optional[bool] = None,
     compress_payload: bool = False,
     compress_threshold: int = 5_000,
+    execution: Optional[str] = None,
     **_kwargs,
 ) -> Callable[[Callable[Params, ReturnVar]], Callable[Params, ReturnVar]]:
     """
@@ -215,9 +216,25 @@ def callback(
             The size threshold in bytes above which the payload will be compressed
             when `compress_payload` is True. Set to 0 to always compress regardless
             of size. Defaults to 5,000 bytes (5 kB).
+        :param execution:
+            Browser scheduling policy. With "latest", a running
+            callback finishes and publishes its result before the latest pending
+            invocation starts. Pending changes are merged, not debounced; Input
+            and State values are read when the next invocation starts. Applies
+            per resolved callback instance and browser page, not as a server lock.
+            Outputs that are also Inputs are not applied if their current value
+            differs from the value supplied to the running invocation.
+            Supports ordinary HTTP server callbacks only.
     """
 
     background_spec: Any = None
+
+    if execution not in (None, "latest"):
+        raise ValueError("execution must be None or 'latest'")
+    if execution and (background or websocket or persistent):
+        raise ValueError(
+            "execution='latest' only supports ordinary HTTP server callbacks"
+        )
 
     config_prevent_initial_callbacks = _kwargs.pop(
         "config_prevent_initial_callbacks", False
@@ -278,6 +295,7 @@ def callback(
         mcp_expose_docstring=mcp_expose_docstring,
         compress_payload=compress_payload,
         compress_threshold=compress_threshold,
+        execution=execution,
     )
 
     return cast(
@@ -361,6 +379,7 @@ def insert_callback(
     mcp_expose_docstring=None,
     compress_payload: bool = False,
     compress_threshold: int = 5_000,
+    execution=None,
 ) -> str:
     if prevent_initial_call is None:
         prevent_initial_call = config_prevent_initial_callbacks
@@ -400,6 +419,8 @@ def insert_callback(
         ]
     if running:
         callback_spec["running"] = running
+    if execution is not None:
+        callback_spec["execution"] = execution
 
     callback_map[callback_id] = {
         "inputs": callback_spec["inputs"],
@@ -916,6 +937,7 @@ def register_callback(
         mcp_expose_docstring=_kwargs.get("mcp_expose_docstring"),
         compress_payload=_kwargs.get("compress_payload", False),
         compress_threshold=_kwargs.get("compress_threshold", 5_000),
+        execution=_kwargs.get("execution"),
     )
     # The client-facing spec insert_callback just appended. Streaming is flagged
     # on it below (once the function is known to be a generator) so the renderer
@@ -929,6 +951,8 @@ def register_callback(
         is_gen_func = inspect.isgeneratorfunction(func)
         is_async_gen_func = inspect.isasyncgenfunction(func)
         is_stream = is_gen_func or is_async_gen_func
+        if is_stream and _kwargs.get("execution"):
+            raise ValueError("execution='latest' does not support streaming callbacks")
         if is_stream:
             _validate_stream_callback(
                 callback_id, background, _kwargs, is_sync_gen=is_gen_func

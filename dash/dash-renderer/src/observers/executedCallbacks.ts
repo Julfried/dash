@@ -1,5 +1,6 @@
 import {
     concat,
+    equals,
     flatten,
     isEmpty,
     isNil,
@@ -127,6 +128,37 @@ const observer: IStoreObserverDefinition<IStoreState> = {
                             layout: oldLayout,
                             paths: oldPaths
                         } = getState();
+
+                        if (cb.callback.execution === 'latest' && payload) {
+                            // Publish the preview, but do not replace an Input
+                            // edited since this invocation started. Otherwise a
+                            // circular control callback erases the newer value
+                            // before its pending invocation can read it.
+                            const currentPath = getPath(oldPaths, parsedId);
+                            const current = currentPath
+                                ? (path(currentPath, oldLayout) as any)
+                                : undefined;
+                            const inputs = flatten(payload.inputs);
+                            props = Object.fromEntries(
+                                Object.entries(props).filter(([property]) => {
+                                    const input = inputs.find(
+                                        item =>
+                                            combineIdAndProp(item) ===
+                                            combineIdAndProp({
+                                                id: parsedId,
+                                                property
+                                            })
+                                    );
+                                    return (
+                                        !input ||
+                                        equals(
+                                            input.value,
+                                            current?.props?.[property]
+                                        )
+                                    );
+                                })
+                            );
+                        }
 
                         // What the Patch operations of this output changed
                         const patchAnalysis = patchedOutputs?.[id];

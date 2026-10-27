@@ -22,6 +22,7 @@ export interface ICallbackDefinition {
     compress_payload?: boolean;
     compress_threshold?: number;
     stream?: boolean;
+    execution?: 'latest';
 }
 
 export interface ICallbackProperty {
